@@ -84,6 +84,32 @@ score ≈ frequency + recency + pin + query_match − noise
 
 Updating a shorthand makes the **new body current** so stale v1 loses to v3.
 
+
+## Awareness modes & user profiles
+
+People realize a clip mattered at different times:
+
+| When they know | Need |
+|---|---|
+| **Before** copy | Intentional Capture |
+| **Right after** use | Soft voluntary prompt (“Stick that?”) |
+| **Much later** | Ephemeral buffer + “Recent (unstuck)” recovery (within TTL) |
+
+**Design:** autonomous local observer + **voluntary** prompts + **per-user config** — sticky paper stays sacred (explicit or confirmed).
+
+### Profiles (config dial)
+
+| Profile | Watcher | Auto-file | Prompts | Buffer |
+|---|---|---|---|---|
+| **Manual** | off | never | none | none — Capture only (current default behavior) |
+| **Coach** *(recommended)* | on | never | soft after rich clips | yes, short TTL |
+| **Autopilot** | on | high-confidence Prompt/CLI (Noise filtered) | confirm secrets only | yes |
+| **Vault** | on | secrets → fingerprint only | always ask before body store | yes, tighter retention |
+
+Advanced toggles under each profile: buffer TTL/size, min length, secret policy, ignore-apps list.
+
+**Learning:** ignore a prompt type often → fewer nudges; stick often → that type can become Autopilot-eligible *for that user* (anti-mean, anti-nag).
+
 ## Habitats (categories)
 
 | Category | Examples |
@@ -141,16 +167,26 @@ Never commit the DB with secrets; never dump full keys in the retrieve list.
 
 ### Done in this tree (local web + CLI)
 - Capture + Retrieve palettes, SQLite store, ranking, secrets hygiene, file metadata, shorthand, FlyBots + specialists, demo seed
+- Behavior today ≈ **Manual** profile (intentional Capture only)
+
+### P5 — Awareness profiles & autonomous buffer
+- [ ] Profile config: **Manual / Coach / Autopilot / Vault** (persisted locally)
+- [ ] Ephemeral clipboard ring (classify only; TTL/size capped; not sticky until confirmed)
+- [ ] Voluntary toasts after rich clips (Coach); secrets always confirm
+- [ ] Retrieve shelf: **Recent (unstuck)** from buffer
+- [ ] Nag-learning: downweight prompts the user ignores; boost types they stick
+- [ ] Autopilot rules: auto-stick high-confidence Prompt/CLI only; never auto-stick raw secrets
+- [ ] Vault: fingerprint-first; ask before any body persistence
 
 ### Later
 - [ ] Global OS hotkeys (macOS / others)
 - [ ] Keychain bridge for secret plaintext
-- [ ] Optional clipboard watcher (explicit opt-in)
 - [ ] Cross-device sync
 
 ## Non-goals
 
-- Whole-disk salvage · Replacing 1Password · Cloud sync in v1 · Silent clipboard surveillance · One FlyBot per paste
+- Whole-disk salvage · Replacing 1Password · Cloud sync in v1 · Silent **permanent** archive without consent · One FlyBot per paste
+- (Ephemeral buffer under Coach/Autopilot/Vault is opt-in via profile — not silent forever-storage)
 
 ## License / claim
 
