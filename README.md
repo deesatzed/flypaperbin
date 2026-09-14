@@ -30,6 +30,12 @@ flypaper capture --trigger pr 'You are a senior engineer. Review this PR…'
 flypaper retrieve
 flypaper retrieve ';pr'
 flypaper guess 'sk-abcdefghijklmnopqrstuvwxyz012345'
+
+# P5 awareness profiles + buffer
+flypaper profile get
+flypaper profile set coach
+flypaper watch-ingest 'git status -sb && git diff --stat'
+flypaper buffer list
 ```
 
 Tests:
@@ -162,21 +168,39 @@ Never commit the DB with secrets; never dump full keys in the retrieve list.
 | POST | `/api/items/{id}/update_body` | make current |
 | GET | `/api/bots` | core + specialists |
 | POST | `/api/demo/seed` | sample data |
+| GET/POST | `/api/config` | profile + buffer TTL/max/min_chars/cooldown |
+| GET | `/api/buffer?include_expired=0` | Recent (unstuck) shelf |
+| POST | `/api/buffer/ingest` | classify → buffer (+ profile actions) |
+| POST | `/api/buffer/{id}/stick` | promote buffer → sticky item |
+| POST | `/api/buffer/{id}/dismiss` | dismiss buffer event |
+| POST | `/api/watch/tick` | watcher simulation (clipboard / paste) |
+| GET | `/api/watch/status` | profile + pending_prompt |
+| POST | `/api/nudge/ack` | nag-learning accept/dismiss |
 
 ## Roadmap
 
 ### Done in this tree (local web + CLI)
 - Capture + Retrieve palettes, SQLite store, ranking, secrets hygiene, file metadata, shorthand, FlyBots + specialists, demo seed
-- Behavior today ≈ **Manual** profile (intentional Capture only)
+- **P5 Awareness profiles & autonomous buffer** (Manual / Coach / Autopilot / Vault)
 
 ### P5 — Awareness profiles & autonomous buffer
-- [ ] Profile config: **Manual / Coach / Autopilot / Vault** (persisted locally)
-- [ ] Ephemeral clipboard ring (classify only; TTL/size capped; not sticky until confirmed)
-- [ ] Voluntary toasts after rich clips (Coach); secrets always confirm
-- [ ] Retrieve shelf: **Recent (unstuck)** from buffer
-- [ ] Nag-learning: downweight prompts the user ignores; boost types they stick
-- [ ] Autopilot rules: auto-stick high-confidence Prompt/CLI only; never auto-stick raw secrets
-- [ ] Vault: fingerprint-first; ask before any body persistence
+- [x] Profile config: **Manual / Coach / Autopilot / Vault** (persisted locally)
+- [x] Ephemeral clipboard ring (classify only; TTL/size capped; not sticky until confirmed)
+- [x] Voluntary toasts after rich clips (Coach); secrets always confirm
+- [x] Retrieve shelf: **Recent (unstuck)** from buffer
+- [x] Nag-learning: downweight prompts the user ignores; boost types they stick
+- [x] Autopilot rules: auto-stick high-confidence Prompt/CLI only; never auto-stick raw secrets
+- [x] Vault: fingerprint-first; ask before any body persistence
+
+### Try Coach mode
+```bash
+flypaper profile set coach
+flypaper serve --port 8787
+# In the UI: ⚙ → Coach → Save
+# Paste into “Live watch” (or allow clipboard) → soft “Stick that?” toast
+# Retrieve → Recent (unstuck) shelf · Stick / dismiss
+# CLI: flypaper watch-ingest 'git status -sb' && flypaper buffer list
+```
 
 ### Later
 - [ ] Global OS hotkeys (macOS / others)

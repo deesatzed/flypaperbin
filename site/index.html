@@ -272,6 +272,74 @@
   .empty {
     text-align: center; padding: 28px; color: var(--muted);
   }
+
+  .gear-btn {
+    appearance: none; border: 1px solid var(--line); background: var(--bg2);
+    color: var(--amber); border-radius: 10px; width: 40px; height: 40px;
+    cursor: pointer; font-size: 1.1rem; display: grid; place-items: center;
+  }
+  .gear-btn:hover { background: var(--paper-lit); }
+  .profile-chip {
+    font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
+    padding: 6px 10px; border-radius: 999px;
+    background: rgba(240,160,48,0.15); border: 1px solid var(--amber-dim);
+    color: var(--amber); text-transform: uppercase;
+  }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    z-index: 80; display: none; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--paper); border: 1px solid var(--amber-dim);
+    border-radius: 16px; padding: 20px; max-width: 440px; width: 100%;
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+  .modal h2 { margin: 0 0 6px; font-size: 1.1rem; color: var(--amber); }
+  .modal p.lead { margin: 0 0 14px; color: var(--muted); font-size: 0.85rem; }
+  .profile-grid { display: grid; gap: 8px; margin-bottom: 14px; }
+  .profile-opt {
+    appearance: none; text-align: left; border: 1px solid var(--line);
+    background: var(--bg2); color: var(--cream); border-radius: 10px;
+    padding: 10px 12px; cursor: pointer; font: inherit;
+  }
+  .profile-opt.active, .profile-opt:hover {
+    border-color: var(--amber-dim); background: var(--paper-lit);
+  }
+  .profile-opt strong { color: var(--amber); display: block; margin-bottom: 2px; }
+  .profile-opt span { font-size: 0.78rem; color: var(--muted); }
+  .cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .cfg-grid label { font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  .cfg-grid input { width: 100%; }
+  #stick-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: linear-gradient(180deg, #3a2f1c, #2a2318);
+    color: var(--cream); border: 1px solid var(--amber);
+    padding: 14px 16px; border-radius: 14px; box-shadow: 0 12px 40px var(--shadow), 0 0 30px var(--amber-glow);
+    opacity: 0; transition: 0.35s cubic-bezier(.2,.8,.2,1); z-index: 70;
+    min-width: min(420px, 92vw); pointer-events: none;
+  }
+  #stick-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  #stick-toast .st-title { font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+  #stick-toast .st-prev { font-family: var(--mono); font-size: 0.82rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 10px; }
+  #stick-toast .st-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .shelf { margin-bottom: 14px; }
+  .shelf h3 {
+    margin: 0 0 8px; font-size: 0.78rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-weight: 650;
+  }
+  .buf-item {
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-radius: 10px; background: rgba(240,160,48,0.06);
+    border: 1px dashed var(--line); margin-bottom: 6px; font-size: 0.84rem;
+  }
+  .buf-item .snippet { flex: 1; min-width: 0; }
+  .watch-box {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  }
+  .watch-box.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -284,9 +352,13 @@
           <p class="tagline">Sticky clipboard memory — catch what matters</p>
         </div>
       </div>
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="capture" id="tab-capture">Capture</button>
-        <button class="tab" data-tab="retrieve" id="tab-retrieve">Retrieve</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="profile-chip" id="profile-chip" title="Awareness profile">Manual</span>
+        <button class="gear-btn" id="btn-settings" type="button" title="Profiles & settings">⚙</button>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="capture" id="tab-capture">Capture</button>
+          <button class="tab" data-tab="retrieve" id="tab-retrieve">Retrieve</button>
+        </div>
       </div>
     </header>
 
@@ -335,6 +407,11 @@
           <button class="btn danger" data-action="esc" type="button"><span class="key">Esc</span> Dismiss</button>
         </div>
         <p class="kbd-legend">Number keys when not typing in a field · <kbd>Esc</kbd> dismiss · sticky &amp; local-first</p>
+        <div class="watch-box hidden" id="watch-box">
+          <label class="hint">Live watch (Coach / Autopilot / Vault)</label>
+          <input type="text" id="live-watch" placeholder="Paste here to demo watcher without OS clipboard permission" />
+          <p class="kbd-legend" style="margin-top:8px">Polls <code>navigator.clipboard</code> when focused · or paste above · Manual = off</p>
+        </div>
       </div>
     </section>
 
@@ -344,6 +421,10 @@
         <div class="search-wrap">
           <input type="text" id="retrieve-q" placeholder="Empty = hot + current · type to filter · ;trigger" autocomplete="off" />
           <span class="fly-hint"><kbd>Enter</kbd> copy</span>
+        </div>
+        <div class="shelf" id="buffer-shelf" hidden>
+          <h3>Recent (unstuck)</h3>
+          <div id="buffer-list"></div>
         </div>
         <div class="list" id="retrieve-list"></div>
         <p class="kbd-legend"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> copy · <kbd>/</kbd> focus search</p>
@@ -359,7 +440,51 @@
   </div>
 
   <div id="toast"></div>
+  <div id="stick-toast" role="dialog" aria-live="polite">
+    <div class="st-title">Stick that?</div>
+    <div class="st-prev" id="stick-prev"></div>
+    <div class="st-actions">
+      <button class="btn primary" type="button" id="stick-yes" style="width:auto"><span class="key">1</span> Stick</button>
+      <button class="btn" type="button" id="stick-custom" style="width:auto"><span class="key">2</span> Customize</button>
+      <button class="btn danger" type="button" id="stick-no" style="width:auto"><span class="key">Esc</span> No</button>
+    </div>
+  </div>
   <div id="fly">🪰</div>
+
+  <div class="modal-backdrop" id="settings-modal">
+    <div class="modal">
+      <h2>Awareness profiles</h2>
+      <p class="lead">Sticky paper stays sacred — watcher is opt-in. <strong>Coach</strong> is recommended.</p>
+      <div class="profile-grid" id="profile-grid">
+        <button type="button" class="profile-opt" data-profile="Manual"><strong>Manual</strong><span>Capture only · no watcher · current default</span></button>
+        <button type="button" class="profile-opt" data-profile="Coach"><strong>Coach</strong><span>Buffer + soft “Stick?” · never auto-file</span></button>
+        <button type="button" class="profile-opt" data-profile="Autopilot"><strong>Autopilot</strong><span>Auto-file high-conf Prompt/CLI · secrets confirm</span></button>
+        <button type="button" class="profile-opt" data-profile="Vault"><strong>Vault</strong><span>Secrets → fingerprint only · ask before body</span></button>
+      </div>
+      <div class="cfg-grid">
+        <div>
+          <label for="cfg-ttl">Buffer TTL (hours)</label>
+          <input type="text" id="cfg-ttl" value="48" />
+        </div>
+        <div>
+          <label for="cfg-max">Buffer max</label>
+          <input type="text" id="cfg-max" value="40" />
+        </div>
+        <div>
+          <label for="cfg-min">Min chars</label>
+          <input type="text" id="cfg-min" value="12" />
+        </div>
+        <div>
+          <label for="cfg-cd">Prompt cooldown (sec)</label>
+          <input type="text" id="cfg-cd" value="90" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" type="button" id="settings-cancel" style="width:auto">Cancel</button>
+        <button class="btn primary" type="button" id="settings-save" style="width:auto">Save</button>
+      </div>
+    </div>
+  </div>
 
 <script>
 (() => {
@@ -371,6 +496,11 @@
   let retrieveItems = [];
   let selectedIdx = 0;
   let previewTimer = null;
+  let currentProfile = "Manual";
+  let pendingPrompt = null;
+  let selectedProfile = "Manual";
+  let lastWatchTick = "";
+  let watchTimer = null;
 
   function toast(msg) {
     const t = $("#toast");
@@ -406,17 +536,169 @@
       $$(".panel").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       $(`#panel-${btn.dataset.tab}`).classList.add("active");
-      if (btn.dataset.tab === "retrieve") refreshRetrieve();
+      if (btn.dataset.tab === "retrieve") {
+        refreshRetrieve();
+        refreshBufferShelf();
+      }
     });
   });
 
   async function refreshHealth() {
     try {
       const h = await api("/api/health");
-      $("#health-chip").textContent = `${h.items} stuck · v${h.version}`;
+      $("#health-chip").textContent = `${h.items} stuck · v${h.version}` + (h.buffer ? ` · ${h.buffer} buffered` : "");
+      if (h.profile) setProfileUI(h.profile);
+      if (h.pending_prompt) showStickToast(h.pending_prompt);
     } catch {
       $("#health-chip").textContent = "offline";
     }
+  }
+
+  function setProfileUI(profile) {
+    currentProfile = profile || "Manual";
+    $("#profile-chip").textContent = currentProfile;
+    const watchOn = currentProfile !== "Manual";
+    $("#watch-box").classList.toggle("hidden", !watchOn);
+    if (watchOn) startWatchLoop();
+    else stopWatchLoop();
+  }
+
+  async function loadConfig() {
+    try {
+      const data = await api("/api/config");
+      const c = data.config || {};
+      setProfileUI(c.profile || "Manual");
+      selectedProfile = currentProfile;
+      $("#cfg-ttl").value = c.buffer_ttl_hours ?? 48;
+      $("#cfg-max").value = c.buffer_max ?? 40;
+      $("#cfg-min").value = c.min_chars ?? 12;
+      $("#cfg-cd").value = c.prompt_cooldown_sec ?? 90;
+      paintProfileOpts();
+      if (data.pending_prompt) showStickToast(data.pending_prompt);
+    } catch { /* ignore */ }
+  }
+
+  function paintProfileOpts() {
+    $$("#profile-grid .profile-opt").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.profile === selectedProfile);
+    });
+  }
+
+  function showStickToast(pending) {
+    if (!pending) return;
+    pendingPrompt = pending;
+    $("#stick-prev").textContent = `[${pending.category || "?"}] ${pending.preview || ""}`;
+    $("#stick-toast").classList.add("show");
+  }
+
+  function hideStickToast() {
+    pendingPrompt = null;
+    $("#stick-toast").classList.remove("show");
+  }
+
+  async function stickPending() {
+    if (!pendingPrompt) return;
+    const id = pendingPrompt.buffer_id;
+    try {
+      await api(`/api/buffer/${id}/stick`, { method: "POST", body: "{}" });
+      hideStickToast();
+      flyLand();
+      toast("Stuck from buffer");
+      refreshHealth();
+      refreshBufferShelf();
+      refreshBots();
+    } catch (e) {
+      toast("Stick failed: " + e.message);
+    }
+  }
+
+  async function dismissPending() {
+    if (!pendingPrompt) return;
+    const id = pendingPrompt.buffer_id;
+    try {
+      await api(`/api/buffer/${id}/dismiss`, { method: "POST", body: "{}" });
+    } catch { /* ignore */ }
+    hideStickToast();
+    toast("Left unstuck");
+    refreshBufferShelf();
+  }
+
+  async function customizePending() {
+    if (!pendingPrompt) return;
+    const prev = pendingPrompt.preview || "";
+    const cat = pendingPrompt.category || "Snippet";
+    hideStickToast();
+    $("#tab-capture").click();
+    $("#capture-text").value = prev;
+    runPreview();
+    toast("Customize in Capture, then file");
+    try {
+      await api("/api/nudge/ack", { method: "POST", body: JSON.stringify({ action: "dismiss", category: cat }) });
+    } catch { /* ignore */ }
+  }
+
+  async function refreshBufferShelf() {
+    const shelf = $("#buffer-shelf");
+    const box = $("#buffer-list");
+    if (currentProfile === "Manual") {
+      shelf.hidden = true;
+      return;
+    }
+    try {
+      const data = await api("/api/buffer?include_expired=0");
+      const events = (data.events || []).filter(e => !e.dismissed && !e.promoted_item_id);
+      if (!events.length) {
+        shelf.hidden = true;
+        return;
+      }
+      shelf.hidden = false;
+      box.innerHTML = events.slice(0, 12).map(e => `
+        <div class="buf-item" data-bid="${e.id}">
+          <div class="snippet">
+            <span class="cat">${esc(e.category_guess || "?")}</span>
+            ${esc((e.preview || "").slice(0, 80))}
+          </div>
+          <div>
+            <button class="mini" data-buf="stick" data-id="${e.id}">Stick</button>
+            <button class="mini" data-buf="dismiss" data-id="${e.id}">✕</button>
+          </div>
+        </div>`).join("");
+    } catch {
+      shelf.hidden = true;
+    }
+  }
+
+  function startWatchLoop() {
+    if (watchTimer) return;
+    watchTimer = setInterval(watchTick, 2500);
+  }
+  function stopWatchLoop() {
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  }
+
+  async function watchTick(forcedText) {
+    if (currentProfile === "Manual") return;
+    let text = forcedText;
+    if (text == null) {
+      const live = ($("#live-watch").value || "").trim();
+      if (live) text = live;
+      else if (document.hasFocus()) {
+        try { text = await navigator.clipboard.readText(); } catch { return; }
+      } else return;
+    }
+    text = (text || "").trim();
+    if (!text || text === lastWatchTick) return;
+    lastWatchTick = text;
+    try {
+      const res = await api("/api/watch/tick", { method: "POST", body: JSON.stringify({ text }) });
+      if (res.pending_prompt) showStickToast(res.pending_prompt);
+      if (res.auto_filed) {
+        toast("Autopilot filed · " + (res.item && res.item.category));
+        flyLand();
+        refreshHealth();
+      }
+      if (res.buffered) refreshBufferShelf();
+    } catch { /* ignore */ }
   }
 
   async function refreshBots() {
@@ -578,6 +860,13 @@
   document.addEventListener("keydown", (ev) => {
     const captureActive = $("#panel-capture").classList.contains("active");
     const retrieveActive = $("#panel-retrieve").classList.contains("active");
+    const stickOpen = $("#stick-toast").classList.contains("show");
+
+    if (stickOpen && !typingInField()) {
+      if (ev.key === "1") { ev.preventDefault(); stickPending(); return; }
+      if (ev.key === "2") { ev.preventDefault(); customizePending(); return; }
+      if (ev.key === "Escape") { ev.preventDefault(); dismissPending(); return; }
+    }
 
     if (ev.key === "/" && !typingInField()) {
       ev.preventDefault();
@@ -593,7 +882,7 @@
       if (ev.key === "4") { ev.preventDefault(); handleCaptureAction("4"); }
       if (ev.key === "5") { ev.preventDefault(); handleCaptureAction("5"); }
     }
-    if (ev.key === "Escape" && captureActive) {
+    if (ev.key === "Escape" && captureActive && !stickOpen) {
       ev.preventDefault();
       handleCaptureAction("esc");
     }
@@ -725,8 +1014,80 @@
     }
   }
 
+  // Settings modal
+  $("#btn-settings").addEventListener("click", async () => {
+    await loadConfig();
+    selectedProfile = currentProfile;
+    paintProfileOpts();
+    $("#settings-modal").classList.add("show");
+  });
+  $("#settings-cancel").addEventListener("click", () => $("#settings-modal").classList.remove("show"));
+  $("#settings-modal").addEventListener("click", (ev) => {
+    if (ev.target === $("#settings-modal")) $("#settings-modal").classList.remove("show");
+  });
+  $("#profile-grid").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-profile]");
+    if (!btn) return;
+    selectedProfile = btn.dataset.profile;
+    paintProfileOpts();
+  });
+  $("#settings-save").addEventListener("click", async () => {
+    try {
+      const payload = {
+        profile: selectedProfile,
+        buffer_ttl_hours: Number($("#cfg-ttl").value) || 48,
+        buffer_max: Number($("#cfg-max").value) || 40,
+        min_chars: Number($("#cfg-min").value) || 12,
+        prompt_cooldown_sec: Number($("#cfg-cd").value) || 90,
+      };
+      const res = await api("/api/config", { method: "POST", body: JSON.stringify(payload) });
+      setProfileUI(res.config.profile);
+      $("#settings-modal").classList.remove("show");
+      toast(res.config.profile === "Coach" ? "Coach on — watcher + soft Stick?" : `Profile: ${res.config.profile}`);
+      refreshBufferShelf();
+      refreshHealth();
+    } catch (e) {
+      toast("Save failed: " + e.message);
+    }
+  });
+
+  $("#stick-yes").addEventListener("click", stickPending);
+  $("#stick-custom").addEventListener("click", customizePending);
+  $("#stick-no").addEventListener("click", dismissPending);
+
+  $("#buffer-list").addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-buf]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.buf === "stick") {
+      try {
+        await api(`/api/buffer/${id}/stick`, { method: "POST", body: "{}" });
+        toast("Stuck from Recent");
+        flyLand($("#panel-retrieve .card"));
+        refreshHealth();
+        refreshBufferShelf();
+        refreshRetrieve();
+      } catch (e) { toast(e.message); }
+    } else if (btn.dataset.buf === "dismiss") {
+      try {
+        await api(`/api/buffer/${id}/dismiss`, { method: "POST", body: "{}" });
+        refreshBufferShelf();
+      } catch { /* ignore */ }
+    }
+  });
+
+  let liveWatchTimer = null;
+  $("#live-watch").addEventListener("input", () => {
+    clearTimeout(liveWatchTimer);
+    liveWatchTimer = setTimeout(() => {
+      const t = $("#live-watch").value;
+      if (t.trim()) watchTick(t);
+    }, 400);
+  });
+
   // boot
   (async () => {
+    await loadConfig();
     await refreshHealth();
     await refreshBots();
     await refreshSubs();
@@ -739,6 +1100,7 @@
         await refreshBots();
       }
     } catch { /* ignore */ }
+    await refreshBufferShelf();
   })();
 })();
 </script>

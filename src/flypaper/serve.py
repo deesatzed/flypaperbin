@@ -17,6 +17,7 @@ from flypaper.classify import classify_for_storage, guess_category
 from flypaper.demo import seed_demo
 from flypaper.rank import public_item, rank_items
 from flypaper.store import CATEGORIES, Store
+from flypaper import watch as watchmod
 
 SITE_DIR = Path(__file__).resolve().parent.parent.parent / "site"
 
@@ -25,6 +26,8 @@ class AppState:
     def __init__(self, store: Store) -> None:
         self.store = store
         self.last_preview: Optional[str] = None
+        self.pending_prompt: Optional[dict] = None
+        self.last_watch_text: Optional[str] = None
         self.lock = threading.RLock()
 
 
@@ -67,11 +70,16 @@ def make_handler(state: AppState):
             if path == "/api/health":
                 with state.lock:
                     count = state.store.count()
+                    cfg = watchmod.get_config(state.store)
+                    buf_n = len(state.store.list_buffer_events())
                 return self._send(*_json_bytes({
                     "ok": True,
                     "version": __version__,
                     "items": count,
                     "product": "FlyPaper",
+                    "profile": cfg["profile"],
+                    "buffer": buf_n,
+                    "pending_prompt": state.pending_prompt,
                 }))
 
             if path == "/api/clipboard/preview":
@@ -113,6 +121,36 @@ def make_handler(state: AppState):
                     if item.get("kind") == "file" and item.get("path"):
                         body = item["path"]
                 return self._send(*_json_bytes({"id": item_id, "text": body}))
+
+            if path == "/api/config" or path == "/api/profile":
+                with state.lock:
+                    cfg = watchmod.get_config(state.store)
+                return self._send(*_json_bytes({
+                    "config": cfg,
+                    "profiles": list(watchmod.PROFILES),
+                    "pending_prompt": state.pending_prompt,
+                }))
+
+            if path == "/api/buffer":
+                include_expired = (qs.get("include_expired") or ["0"])[0] in ("1", "true", "yes")
+                with state.lock:
+                    events = watchmod.list_buffer(state.store, include_expired=include_expired)
+                    cfg = watchmod.get_config(state.store)
+                return self._send(*_json_bytes({
+                    "events": events,
+                    "profile": cfg["profile"],
+                    "pending_prompt": state.pending_prompt,
+                }))
+
+            if path == "/api/watch/status":
+                with state.lock:
+                    cfg = watchmod.get_config(state.store)
+                return self._send(*_json_bytes({
+                    "profile": cfg["profile"],
+                    "watching": cfg["profile"] != "Manual",
+                    "pending_prompt": state.pending_prompt,
+                    "last_watch_text": (state.last_watch_text or "")[:80] or None,
+                }))
 
             # static
             return self._serve_static(path)
@@ -212,6 +250,83 @@ def make_handler(state: AppState):
                         meta=fields.get("meta"),
                     )
                 return self._send(*_json_bytes({"item": public_item(item), "action": "forked"}))
+
+            if path in ("/api/config", "/api/profile"):
+                with state.lock:
+                    cfg = watchmod.set_config_fields(state.store, data)
+                return self._send(*_json_bytes({"ok": True, "config": cfg, "profiles": list(watchmod.PROFILES)}))
+
+            if path == "/api/buffer/ingest":
+                text = data.get("text") or ""
+                with state.lock:
+                    result = watchmod.ingest(state.store, text, source="api")
+                    if result.get("pending_prompt"):
+                        state.pending_prompt = result["pending_prompt"]
+                    elif result.get("auto_filed"):
+                        state.pending_prompt = None
+                return self._send(*_json_bytes(result))
+
+            if path == "/api/watch/tick":
+                text = data.get("text") or ""
+                with state.lock:
+                    cfg = watchmod.get_config(state.store)
+                    if cfg["profile"] == "Manual":
+                        return self._send(*_json_bytes({
+                            "ok": True,
+                            "skipped": True,
+                            "reason": "manual_profile",
+                            "profile": "Manual",
+                            "pending_prompt": None,
+                        }))
+                    # skip identical consecutive ticks
+                    if text and text == state.last_watch_text:
+                        return self._send(*_json_bytes({
+                            "ok": True,
+                            "skipped": True,
+                            "reason": "unchanged",
+                            "profile": cfg["profile"],
+                            "pending_prompt": state.pending_prompt,
+                            "buffer_event": None,
+                        }))
+                    state.last_watch_text = text
+                    result = watchmod.ingest(state.store, text, source="watch")
+                    if result.get("pending_prompt"):
+                        state.pending_prompt = result["pending_prompt"]
+                    elif result.get("auto_filed"):
+                        state.pending_prompt = None
+                return self._send(*_json_bytes(result))
+
+            m = re.fullmatch(r"/api/buffer/(\d+)/stick", path)
+            if m:
+                bid = int(m.group(1))
+                with state.lock:
+                    result = watchmod.stick_buffer(state.store, bid, extra=data)
+                    if result.get("ok"):
+                        state.pending_prompt = None
+                status = 200 if result.get("ok") else (404 if result.get("error") == "not found" else 400)
+                return self._send(*_json_bytes(result, status))
+
+            m = re.fullmatch(r"/api/buffer/(\d+)/dismiss", path)
+            if m:
+                bid = int(m.group(1))
+                with state.lock:
+                    result = watchmod.dismiss_buffer(state.store, bid)
+                    if state.pending_prompt and state.pending_prompt.get("buffer_id") == bid:
+                        state.pending_prompt = None
+                status = 200 if result.get("ok") else 404
+                return self._send(*_json_bytes(result, status))
+
+            if path == "/api/nudge/ack":
+                # optional: client ack for customize / esc without stick
+                action = (data.get("action") or "dismiss").lower()
+                cat = data.get("category") or "Snippet"
+                with state.lock:
+                    if action == "accept":
+                        watchmod.record_nudge_accepted(state.store, cat)
+                    else:
+                        watchmod.record_nudge_dismissed(state.store, cat)
+                    state.pending_prompt = None
+                return self._send(*_json_bytes({"ok": True}))
 
             return self._send(*_json_bytes({"error": "not found"}, 404))
 

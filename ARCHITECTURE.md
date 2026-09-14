@@ -22,9 +22,15 @@ Capture → classify → palette → persist item + `file` event
 Retrieve → score items → palette → copy + `retrieve` event  
 Update shorthand → `update` event (body becomes current)
 
+## P5 awareness loop
+Config `profile` (Manual|Coach|Autopilot|Vault) in SQLite `config`  
+`watch.tick` / `buffer.ingest` → classify → `buffer_events` (TTL/max)  
+Coach: soft pending_prompt · Autopilot: auto-file high-conf Prompt/CLI · Vault: secret fingerprint-only  
+`buffer.stick` → same capture path · `nudge_stats` downweights ignored categories
+
 ## Layout
 ```
-src/flypaper/{cli,store,classify,rank,bots,serve,demo}.py
+src/flypaper/{cli,store,classify,rank,bots,serve,demo,watch}.py
 site/index.html
 tests/
 ```
