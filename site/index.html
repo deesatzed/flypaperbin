@@ -340,9 +340,53 @@
     margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
   }
   .watch-box.hidden { display: none; }
+
+  #welcome {
+    position: fixed; inset: 0; z-index: 80;
+    background: rgba(8,6,4,0.72);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.25rem;
+  }
+  #welcome.hidden { display: none; }
+  #welcome .card {
+    max-width: 420px; width: 100%;
+    background: linear-gradient(160deg, #2a2218, #1a1510);
+    border: 1px solid #c4a57455;
+    border-radius: 16px;
+    padding: 1.25rem 1.35rem 1.1rem;
+    box-shadow: 0 24px 60px #000a;
+  }
+  #welcome h2 { margin: 0 0 0.35rem; font-size: 1.25rem; color: #f0d9a8; }
+  #welcome .meme {
+    width: 100%; border-radius: 10px; margin: 0.75rem 0;
+    border: 1px solid #c4a57433;
+  }
+  #welcome ol { margin: 0.4rem 0 0.9rem; padding-left: 1.2rem; color: #e8dcc8; line-height: 1.45; }
+  #welcome ol li { margin: 0.35rem 0; }
+  #welcome .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  #welcome .lead { color: #b9a890; font-size: 0.88rem; margin: 0; }
+
 </style>
 </head>
 <body>
+
+  <div id="welcome" role="dialog" aria-label="Welcome to FlyPaper">
+    <div class="card">
+      <h2>🪰 FlyPaper — 3 steps</h2>
+      <p class="lead">Sticky clipboard memory. Decide, then file. Coach can nudge; Manual never watches.</p>
+      <img class="meme" src="/assets/flypaper-file-meme.png" alt="Meme: fly files clipboard items after decisions" width="400" height="400"/>
+      <ol>
+        <li><strong>Capture</strong> — paste → press <kbd>1</kbd> to stick (or 2–5 / Esc).</li>
+        <li><strong>Retrieve</strong> — empty search = hot+current → <kbd>Enter</kbd> copies.</li>
+        <li><strong>Optional Coach</strong> — ⚙ → Coach → Live watch → “Stick that?”</li>
+      </ol>
+      <div class="row">
+        <button type="button" class="btn primary" id="welcome-go">Got it — start Capture</button>
+        <button type="button" class="btn" id="welcome-coach">Use Coach</button>
+      </div>
+    </div>
+  </div>
+
   <div class="wrap">
     <header>
       <div class="brand">
@@ -1103,6 +1147,29 @@
     await refreshBufferShelf();
   })();
 })();
+
+  // First-run welcome
+  (function welcomeGate() {
+    const el = document.getElementById("welcome");
+    if (!el) return;
+    const seen = localStorage.getItem("flypaper_welcome_v1");
+    if (seen) el.classList.add("hidden");
+    function dismiss() {
+      localStorage.setItem("flypaper_welcome_v1", "1");
+      el.classList.add("hidden");
+    }
+    document.getElementById("welcome-go")?.addEventListener("click", dismiss);
+    document.getElementById("welcome-coach")?.addEventListener("click", async () => {
+      try {
+        await api("/api/config", { method: "POST", body: JSON.stringify({ profile: "Coach" }) });
+        await loadConfig();
+        toast("Coach on — watcher + soft Stick?");
+      } catch (e) { toast(String(e.message || e)); }
+      dismiss();
+      document.getElementById("tab-capture")?.click();
+    });
+  })();
+
 </script>
 </body>
 </html>

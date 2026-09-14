@@ -7,6 +7,17 @@ Later hit **Retrieve** → ranked by **how often + how current** → Enter puts 
 
 > Assists local recall and key hygiene. Not a password manager replacement. Not cloud sync (v1). Not a whole-disk indexer.
 
+
+## Simple use (3 steps)
+
+1. **Start** — `flypaper serve --port 8787` → open http://127.0.0.1:8787  
+2. **Capture** — paste something useful → press **1** to file as guessed (or 2–5 to categorize / shorthand / secret). **Esc** dismisses.  
+3. **Retrieve** — open the Retrieve tab → leave search empty for hot+current → **Enter** copies it back.
+
+Meme mascot lives at `site/assets/flypaper-file-meme.png` (also on the first-run welcome).
+
+Optional: ⚙ → set profile to **Coach** → paste into **Live watch** → answer **Stick that?** when asked. Manual = Capture only (no watcher).
+
 ## Quick start
 
 ```bash
@@ -45,6 +56,10 @@ pytest -q
 ```
 
 Data lives in `~/.flypaper/flypaper.db` (override with `FLYPAPER_DB`).
+
+## Name note
+
+**FlyPaper** stays the product name (sticky memory). **FileFly** is the mascot — the clerk fly who stamps DECISION then files. Repo/app id remains `flypaperbin` / `flypaper` unless we deliberately rename later.
 
 ## Why “FlyPaper”
 
