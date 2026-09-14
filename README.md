@@ -7,6 +7,39 @@ Later hit **Retrieve** → ranked by **how often + how current** → Enter puts 
 
 > Assists local recall and key hygiene. Not a password manager replacement. Not cloud sync (v1). Not a whole-disk indexer.
 
+## Quick start
+
+```bash
+cd flypaperbin
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Seed sample prompts/CLI so the UI isn’t empty
+flypaper demo-seed
+
+# Local web UI + JSON API (opens sticky palettes)
+flypaper serve --port 8787
+# → http://127.0.0.1:8787
+```
+
+CLI without the browser:
+
+```bash
+flypaper capture 'git status -sb'
+flypaper capture --trigger pr 'You are a senior engineer. Review this PR…'
+flypaper retrieve
+flypaper retrieve ';pr'
+flypaper guess 'sk-abcdefghijklmnopqrstuvwxyz012345'
+```
+
+Tests:
+
+```bash
+pytest -q
+```
+
+Data lives in `~/.flypaper/flypaper.db` (override with `FLYPAPER_DB`).
+
 ## Why “FlyPaper”
 
 Everything you *choose* to Capture sticks. Noise you never hotkey never pollutes the ranking. Named flies (not one mega-bot) sort streams the way a fruit-fly connectome keeps modular pathways — with extra bristles (specialists) only when a subcategory gets busy.
@@ -17,32 +50,31 @@ Stop losing repeat prompts, CLI one-liners, strings, API-key context, and file/i
 
 ## UX (driver)
 
-### Capture (manual hotkey only in v1)
+### Capture palette (`/` or Capture tab)
 
-Overlay on current clipboard contents:
+Paste or **Read clipboard**, then number-key actions:
 
 1. **File as guessed**
 2. **Category…**
 3. **Subcategory…** (type-ahead create)
-4. **Save shorthand** (`;name`)
+4. **Shorthand trigger** (`;name`)
 5. **Secret / key log**
-6. Esc = forget / dismiss
+6. **Esc** = forget / dismiss
 
-No always-on silent archive in v1 (optional watcher is a later, explicit opt-in).
+Near-duplicates offer **Update** (make current) vs **Fork**.
 
-### Retrieve (second hotkey)
+### Retrieve palette
 
-- Empty query → **hot + current** list (frequency × recency, pins win, noise loses)
-- Type to filter; Enter → copy to clipboard
-- Secrets show **name + last4** only; value from Keychain only if you saved it
+- Empty query → **hot + current** list (frequency + recency + pin − noise) with heat bars
+- Type to filter; `;trigger` exact shorthand; **Enter** copies via `navigator.clipboard`
+- Secrets show **name + last4** only — full key never in the retrieve list body
 
 ### Files / images / docs
 
-Only when Capture is pressed and the clipboard holds a file URL / image / document:
+If the payload looks like a path or `file://` URL:
 
-- Store **metadata** (path, filename, type, size, mtime, cheap hash) — not a full file copy by default
-- If the name is opaque (`IMG_4291.png`), prompt for an optional **one-line description**
-- Retrieve by description or filename; Enter restores path/URL to the clipboard
+- Store **metadata** (path, filename, description) — not a full file copy
+- Opaque names (`IMG_`, `DSC_`, `Untitled`, `Scan`) prompt for a one-line description
 
 ### Ranking
 
@@ -61,106 +93,64 @@ Updating a shorthand makes the **new body current** so stale v1 loses to v3.
 | Snippet | Code, JSON, SQL |
 | Secret | API keys (fingerprint log) |
 | URL | Links / tickets |
-| File / Image / Doc | Paths + metadata + description |
+| File | Paths + metadata + description |
 | Noise | Fade; don’t train on it |
-
-Subcategories are **yours** (`Prompt/PR-review`, `CLI/gh`, `Image/Screenshots`).
 
 ## FlyBot architecture
 
-### Fixed core (5)
+### Fixed core (5) — shown in the UI status bar
 
 | FlyBot | Role |
 |---|---|
-| **Capture Captain** | Hotkeys, overlay, store I/O |
+| **Capture Captain** | Overlay, store I/O |
 | **Text Sorter** | Prompt / CLI / Snippet / URL / Noise |
-| **Secret Sentinel** | Key-shaped → fingerprint + Keychain gate |
+| **Secret Sentinel** | Key-shaped → fingerprint + redaction |
 | **File Scout** | File/image/doc metadata + description |
 | **Retrieve Concierge** | Frequency × recency palette + triggers |
 
 ### Dynamic specialists
 
-Spawn when a subcategory needs its own policy — not one bot per paste.
-
-**Mint when:** subcat has enough items *and* parent keeps mis-filing it; or you hit “Promote subcat to specialist.”
-
-**Each specialist:** thin policy + teach chips + optional `;prefix`; reports up to Captain.
-
-**Hygiene:** soft cap (~12–20); merge/retire when cold. In-process first; sidebar teammates only if you want them visible later.
-
-```
-Retrieve Concierge ←→ Store
-        ↑
-Capture Captain
-   ├── Text Sorter ──► [dynamic Prompt/*, CLI/*, …]
-   ├── Secret Sentinel
-   └── File Scout ──► [dynamic Image/*, Doc/*, …]
-```
+Spawn when a subcategory reaches **≥ 5 items** (simple rule). Thin policy + optional `;prefix`; reports up to Captain.
 
 ## Secrets / API keys
 
-- Detect key-shaped clipboard → Secret habitat
-- Persist fingerprint, last4, first/last seen, status `active|rotated|missing`
-- Plaintext → **Keychain only on explicit confirm**
-- New key same service → old `rotated`; Retrieve ranks active first
-- Never commit the DB with secrets; never dump full keys in the retrieve list
+- Detect `sk-`, `ghp_`, `AKIA`, high-entropy tokens → Secret habitat
+- Persist **fingerprint**, **last4**, status `active|rotated|missing`
+- Retrieve list stores **redacted body** only — never the full secret by default
+- Optional later: macOS **Keychain** (or OS secret store) for plaintext on explicit confirm — not wired in v1
+
+Never commit the DB with secrets; never dump full keys in the retrieve list.
+
+## HTTP API
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/health` | version + item count |
+| GET/POST | `/api/clipboard/preview` | last posted text |
+| POST | `/api/capture/preview` | guess, near_matches, needs_description |
+| POST | `/api/capture` | file / dismiss / secret / near update |
+| GET | `/api/retrieve?q=` | ranked public items |
+| GET | `/api/retrieve/copy?id=` | text for clipboard + retrieve event |
+| POST | `/api/items/{id}/pin` | pin |
+| DELETE | `/api/items/{id}` | forget |
+| POST | `/api/items/{id}/update_body` | make current |
+| GET | `/api/bots` | core + specialists |
+| POST | `/api/demo/seed` | sample data |
 
 ## Roadmap
 
-### P0 — Skeleton (first real win)
-- [ ] macOS Capture + Retrieve global hotkeys
-- [ ] Text capture → guess → file / recategorize / dismiss
-- [ ] SQLite store (items, events, triggers)
-- [ ] Retrieve palette: empty = hot+current; Enter copies
-- [ ] Real forget/delete
+### Done in this tree (local web + CLI)
+- Capture + Retrieve palettes, SQLite store, ranking, secrets hygiene, file metadata, shorthand, FlyBots + specialists, demo seed
 
-### P1 — Filing depth
-- [ ] Subcategories + type-ahead
-- [ ] Shorthand triggers + Update vs Fork on near-dup
-- [ ] File/image/doc metadata + optional description
-- [ ] Pin / unpin
-- [ ] Dynamic specialist spawn rules (basic)
-
-### P2 — Secrets hygiene
-- [ ] Secret detector + fingerprint log
-- [ ] Optional Keychain save / retrieve
-- [ ] Rotation handling
-
-### P3 — Smart ranking
-- [ ] Weight tuning; optional frontmost-app boost
-- [ ] “Like this” similar prompts
-- [ ] Explain-why-ranked (tiny)
-
-### P4 — Optional (explicit yes)
-- [ ] Always-on clipboard watcher (off by default)
-- [ ] Paste-to-frontmost-app
-- [ ] Full file ingest / thumbnails
+### Later
+- [ ] Global OS hotkeys (macOS / others)
+- [ ] Keychain bridge for secret plaintext
+- [ ] Optional clipboard watcher (explicit opt-in)
 - [ ] Cross-device sync
-- [ ] Tie-in to redakt-flies when a prompt embeds a key
-
-## Build plan (engineering)
-
-**Stack (proposed):** macOS first; small overlay app (SwiftUI or Tauri) for global hotkeys + clipboard APIs; SQLite in Application Support; Keychain for secret values.
-
-**Classifier v0:** rules + heuristics + user teach chips. LLM naming of clusters is optional later — not on the Capture critical path.
-
-**Minimal schema:**
-- `items` — kind, category, subcategory, body/path/description, fingerprint, trigger, pin, versions, timestamps
-- `events` — file | retrieve | update | dismiss
-- Scores derived from events (freq, recency)
-
-**Definition of done:**
-- P0: Capture + Retrieve twice a day without opening Settings
-- P1: File a screenshot with a description; find it by that text
-- P2: Rotate a key; old one is not offered as current
 
 ## Non-goals
 
-- Whole-disk / dup-iteration salvage (two-volume disk salvage is a different product)
-- Replacing 1Password/Bitwarden
-- Cloud sync in v1
-- Silent clipboard surveillance in v1
-- One FlyBot per clipboard event
+- Whole-disk salvage · Replacing 1Password · Cloud sync in v1 · Silent clipboard surveillance · One FlyBot per paste
 
 ## License / claim
 

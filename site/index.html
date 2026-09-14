@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FlyPaper — sticky clipboard memory</title>
+<style>
+  :root {
+    --bg: #0f0e0c;
+    --bg2: #1a1712;
+    --paper: #2a2318;
+    --paper-lit: #3a2f1c;
+    --amber: #f0a030;
+    --amber-dim: #c07820;
+    --amber-glow: rgba(240, 160, 48, 0.35);
+    --cream: #f5e6c8;
+    --muted: #9a8b6e;
+    --danger: #e06050;
+    --ok: #6bcb6b;
+    --line: rgba(240, 160, 48, 0.18);
+    --shadow: rgba(0,0,0,0.55);
+    --font: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(240,160,48,0.08), transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(120,80,20,0.12), transparent 45%),
+      var(--bg);
+    color: var(--cream);
+    font-family: var(--font);
+  }
+  /* subtle paper grain */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 0;
+  }
+  .wrap {
+    position: relative; z-index: 1;
+    max-width: 920px; margin: 0 auto; padding: 28px 20px 80px;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 22px; flex-wrap: wrap;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: linear-gradient(145deg, var(--amber), #a06018);
+    box-shadow: 0 0 24px var(--amber-glow), inset 0 1px 0 rgba(255,255,255,0.35);
+    display: grid; place-items: center; font-size: 22px;
+    animation: buzz 4s ease-in-out infinite;
+  }
+  @keyframes buzz {
+    0%, 90%, 100% { transform: rotate(0deg); }
+    92% { transform: rotate(-6deg) translateY(-1px); }
+    94% { transform: rotate(5deg); }
+    96% { transform: rotate(-3deg); }
+    98% { transform: rotate(2deg); }
+  }
+  h1 {
+    margin: 0; font-size: 1.45rem; letter-spacing: 0.02em;
+    font-weight: 650;
+  }
+  h1 span { color: var(--amber); }
+  .tagline { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+  .tabs {
+    display: flex; gap: 6px; background: var(--bg2);
+    padding: 4px; border-radius: 12px; border: 1px solid var(--line);
+  }
+  .tab {
+    appearance: none; border: 0; background: transparent;
+    color: var(--muted); padding: 10px 18px; border-radius: 9px;
+    cursor: pointer; font: inherit; font-weight: 600; letter-spacing: 0.02em;
+    transition: 0.18s ease;
+  }
+  .tab:hover { color: var(--cream); }
+  .tab.active {
+    background: var(--paper-lit); color: var(--amber);
+    box-shadow: 0 2px 10px var(--shadow);
+  }
+  .panel { display: none; animation: rise 0.28s ease; }
+  .panel.active { display: block; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  .card {
+    background:
+      linear-gradient(180deg, rgba(240,160,48,0.06), transparent 40%),
+      var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px 18px 14px;
+    box-shadow: 0 12px 40px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .card::after {
+    content: "";
+    position: absolute; top: -30px; right: -20px;
+    width: 90px; height: 90px; border-radius: 50%;
+    background: radial-gradient(circle, var(--amber-glow), transparent 70%);
+    pointer-events: none;
+  }
+  label.hint {
+    display: block; font-size: 0.75rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  textarea, input[type="text"] {
+    width: 100%; background: var(--bg2); color: var(--cream);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; font: inherit; font-family: var(--mono); font-size: 0.92rem;
+    resize: vertical; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  textarea:focus, input[type="text"]:focus {
+    border-color: var(--amber-dim);
+    box-shadow: 0 0 0 3px var(--amber-glow);
+  }
+  textarea { min-height: 120px; line-height: 1.45; }
+  .actions {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-top: 14px;
+  }
+  .btn {
+    appearance: none; border: 1px solid var(--line);
+    background: var(--bg2); color: var(--cream);
+    border-radius: 10px; padding: 11px 12px; cursor: pointer;
+    font: inherit; font-size: 0.88rem; text-align: left;
+    transition: 0.15s ease; position: relative;
+  }
+  .btn:hover, .btn:focus-visible {
+    border-color: var(--amber-dim); background: var(--paper-lit);
+    transform: translateY(-1px);
+  }
+  .btn.primary {
+    background: linear-gradient(145deg, #d89028, #a06018);
+    border-color: transparent; color: #1a1208; font-weight: 700;
+  }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn .key {
+    display: inline-block; min-width: 1.4em; margin-right: 6px;
+    color: var(--amber); font-weight: 700; font-family: var(--mono);
+  }
+  .btn.danger:hover { border-color: var(--danger); color: #ffb0a8; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(240,160,48,0.12); color: var(--amber);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 10px; font-size: 0.78rem; font-weight: 600;
+  }
+  .chip.muted { color: var(--muted); background: rgba(255,255,255,0.04); }
+  .guess-box {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: rgba(0,0,0,0.25); border: 1px dashed var(--line);
+    font-size: 0.88rem; color: var(--muted);
+  }
+  .guess-box strong { color: var(--amber); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  @media (max-width: 640px) { .field-row { grid-template-columns: 1fr; } }
+  .field-row label { font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px; }
+  .near {
+    margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px;
+  }
+  .near h3 { margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+  .near-item {
+    display: flex; gap: 8px; align-items: center; justify-content: space-between;
+    padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.2); margin-bottom: 6px;
+    font-size: 0.82rem;
+  }
+  .near-item code { color: var(--cream); font-family: var(--mono); }
+  .mini {
+    appearance: none; border: 1px solid var(--line); background: var(--paper);
+    color: var(--amber); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 0.75rem;
+  }
+  /* Retrieve */
+  .search-wrap { position: relative; }
+  .search-wrap .fly-hint {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 0.75rem; pointer-events: none;
+  }
+  .list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    display: grid; grid-template-columns: 8px 1fr auto; gap: 12px; align-items: start;
+    padding: 12px 14px; border-radius: 12px;
+    background: var(--bg2); border: 1px solid transparent;
+    cursor: pointer; transition: 0.15s ease;
+  }
+  .item:hover, .item.selected {
+    border-color: var(--amber-dim);
+    background: var(--paper);
+    box-shadow: 0 4px 18px var(--shadow);
+  }
+  .heat {
+    width: 6px; height: 100%; min-height: 36px; border-radius: 4px;
+    background: linear-gradient(180deg, var(--amber), #5a3810);
+    align-self: stretch;
+    opacity: 0.35;
+  }
+  .item-body { min-width: 0; }
+  .item-top {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px;
+  }
+  .cat {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--amber-dim); font-weight: 700;
+  }
+  .trig { font-family: var(--mono); color: var(--amber); font-size: 0.8rem; }
+  .snippet {
+    font-family: var(--mono); font-size: 0.86rem; color: var(--cream);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item-actions { display: flex; flex-direction: column; gap: 4px; }
+  .icon-btn {
+    appearance: none; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 0.95rem; padding: 2px 4px; border-radius: 4px;
+  }
+  .icon-btn:hover { color: var(--amber); background: rgba(240,160,48,0.1); }
+  .status-bar {
+    margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  .bot {
+    font-size: 0.72rem; padding: 5px 9px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--muted);
+  }
+  .bot.core { border-color: rgba(240,160,48,0.35); color: #d4b07a; }
+  .bot.spec { border-color: rgba(107,203,107,0.35); color: #9dcf9d; }
+  footer {
+    margin-top: 36px; text-align: center; color: var(--muted); font-size: 0.8rem;
+    border-top: 1px solid var(--line); padding-top: 18px;
+  }
+  footer .claim { color: var(--cream); opacity: 0.7; }
+  /* toast + fly landing */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--paper-lit); color: var(--cream); border: 1px solid var(--amber-dim);
+    padding: 12px 18px; border-radius: 12px; box-shadow: 0 10px 30px var(--shadow);
+    opacity: 0; transition: 0.35s cubic-bezier(.2,.8,.2,1); z-index: 50;
+    font-weight: 600;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #fly {
+    position: fixed; width: 28px; height: 28px; pointer-events: none; z-index: 60;
+    font-size: 22px; opacity: 0; transition: none;
+  }
+  #fly.land {
+    animation: land 0.9s ease forwards;
+  }
+  @keyframes land {
+    0% { opacity: 0; transform: translate(-40px, -80px) rotate(-20deg) scale(0.6); }
+    40% { opacity: 1; }
+    70% { transform: translate(4px, 2px) rotate(8deg) scale(1.05); }
+    100% { opacity: 0; transform: translate(0, 0) rotate(0) scale(1); }
+  }
+  .kbd-legend {
+    margin-top: 10px; font-size: 0.75rem; color: var(--muted);
+  }
+  kbd {
+    display: inline-block; padding: 1px 5px; border-radius: 4px;
+    border: 1px solid var(--line); background: var(--bg); font-family: var(--mono);
+    font-size: 0.72rem; color: var(--amber);
+  }
+  .empty {
+    text-align: center; padding: 28px; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" title="FlyPaper">🪰</div>
+        <div>
+          <h1>Fly<span>Paper</span></h1>
+          <p class="tagline">Sticky clipboard memory — catch what matters</p>
+        </div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="capture" id="tab-capture">Capture</button>
+        <button class="tab" data-tab="retrieve" id="tab-retrieve">Retrieve</button>
+      </div>
+    </header>
+
+    <section id="panel-capture" class="panel active" role="tabpanel">
+      <div class="card" id="capture-card">
+        <label class="hint">Clipboard / paste zone</label>
+        <textarea id="capture-text" placeholder="Paste something useful… prompts, CLI, paths, keys"></textarea>
+        <div class="meta-row">
+          <button class="btn" id="btn-read-clip" type="button" style="width:auto;padding:8px 12px">📋 Read clipboard</button>
+          <span class="chip muted" id="health-chip">…</span>
+        </div>
+        <div class="guess-box" id="guess-box">Guess will appear as you type…</div>
+        <div class="field-row">
+          <div>
+            <label for="fld-category">Category</label>
+            <input type="text" id="fld-category" list="cat-list" placeholder="Prompt / CLI / …" />
+            <datalist id="cat-list">
+              <option>Prompt</option><option>CLI</option><option>Snippet</option>
+              <option>Secret</option><option>URL</option><option>File</option><option>Noise</option>
+            </datalist>
+          </div>
+          <div>
+            <label for="fld-sub">Subcategory</label>
+            <input type="text" id="fld-sub" list="sub-list" placeholder="type-ahead create" />
+            <datalist id="sub-list"></datalist>
+          </div>
+          <div>
+            <label for="fld-trigger">Shorthand <code>;name</code></label>
+            <input type="text" id="fld-trigger" placeholder=";pr" />
+          </div>
+          <div>
+            <label for="fld-desc">Description (files)</label>
+            <input type="text" id="fld-desc" placeholder="optional one-liner" />
+          </div>
+        </div>
+        <div class="near" id="near-box" hidden>
+          <h3>Near matches — update or fork?</h3>
+          <div id="near-list"></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-action="1" type="button"><span class="key">1</span> File as guessed</button>
+          <button class="btn" data-action="2" type="button"><span class="key">2</span> Category…</button>
+          <button class="btn" data-action="3" type="button"><span class="key">3</span> Subcategory…</button>
+          <button class="btn" data-action="4" type="button"><span class="key">4</span> Shorthand</button>
+          <button class="btn" data-action="5" type="button"><span class="key">5</span> Secret log</button>
+          <button class="btn danger" data-action="esc" type="button"><span class="key">Esc</span> Dismiss</button>
+        </div>
+        <p class="kbd-legend">Number keys when not typing in a field · <kbd>Esc</kbd> dismiss · sticky &amp; local-first</p>
+      </div>
+    </section>
+
+    <section id="panel-retrieve" class="panel" role="tabpanel">
+      <div class="card">
+        <label class="hint">Retrieve palette</label>
+        <div class="search-wrap">
+          <input type="text" id="retrieve-q" placeholder="Empty = hot + current · type to filter · ;trigger" autocomplete="off" />
+          <span class="fly-hint"><kbd>Enter</kbd> copy</span>
+        </div>
+        <div class="list" id="retrieve-list"></div>
+        <p class="kbd-legend"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> copy · <kbd>/</kbd> focus search</p>
+      </div>
+    </section>
+
+    <div class="status-bar" id="bots-bar"></div>
+
+    <footer>
+      <p class="claim">Local-first · You own the data on your machine · Not a password manager</p>
+      <p>Name: FlyPaper. Catch what matters. Leave the rest.</p>
+    </footer>
+  </div>
+
+  <div id="toast"></div>
+  <div id="fly">🪰</div>
+
+<script>
+(() => {
+  const $ = (s, el=document) => el.querySelector(s);
+  const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+
+  let lastGuess = null;
+  let nearMatches = [];
+  let retrieveItems = [];
+  let selectedIdx = 0;
+  let previewTimer = null;
+
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  function flyLand(anchor) {
+    const fly = $("#fly");
+    const r = (anchor || $("#capture-card")).getBoundingClientRect();
+    fly.style.left = (r.left + r.width * 0.7) + "px";
+    fly.style.top = (r.top + 24) + "px";
+    fly.classList.remove("land");
+    void fly.offsetWidth;
+    fly.classList.add("land");
+  }
+
+  async function api(path, opts={}) {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(opts.headers||{}) },
+      ...opts,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
+  }
+
+  // Tabs
+  $$(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      $$(".tab").forEach(b => b.classList.remove("active"));
+      $$(".panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      $(`#panel-${btn.dataset.tab}`).classList.add("active");
+      if (btn.dataset.tab === "retrieve") refreshRetrieve();
+    });
+  });
+
+  async function refreshHealth() {
+    try {
+      const h = await api("/api/health");
+      $("#health-chip").textContent = `${h.items} stuck · v${h.version}`;
+    } catch {
+      $("#health-chip").textContent = "offline";
+    }
+  }
+
+  async function refreshBots() {
+    try {
+      const { bots } = await api("/api/bots");
+      $("#bots-bar").innerHTML = bots.map(b =>
+        `<span class="bot ${b.kind === "specialist" ? "spec" : "core"}" title="${b.role}">${b.name}</span>`
+      ).join("");
+    } catch { /* ignore */ }
+  }
+
+  async function refreshSubs() {
+    try {
+      const { subcategories } = await api("/api/categories");
+      $("#sub-list").innerHTML = subcategories.map(s => `<option value="${esc(s)}">`).join("");
+    } catch { /* ignore */ }
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  }
+
+  async function runPreview() {
+    const text = $("#capture-text").value;
+    if (!text.trim()) {
+      $("#guess-box").innerHTML = "Guess will appear as you type…";
+      $("#near-box").hidden = true;
+      return;
+    }
+    try {
+      const data = await api("/api/capture/preview", { method: "POST", body: JSON.stringify({ text }) });
+      lastGuess = data.guess;
+      nearMatches = data.near_matches || [];
+      const g = data.guess;
+      let html = `Guessed <strong>${esc(g.category)}</strong>`;
+      if (g.subcategory) html += ` / ${esc(g.subcategory)}`;
+      html += ` <span class="chip muted">${Math.round((g.confidence||0)*100)}%</span>`;
+      if (g.needs_description) html += ` · <strong style="color:var(--danger)">opaque filename — add a description</strong>`;
+      if (g.secret) html += ` · Secret Sentinel: <code>${esc(g.secret.redacted)}</code> · fp ${esc((g.secret.fingerprint||"").slice(0,8))}…`;
+      if (g.file) html += ` · File Scout: ${esc(g.file.filename)}`;
+      $("#guess-box").innerHTML = html;
+      if (!$("#fld-category").value) $("#fld-category").placeholder = g.category;
+      if (g.subcategory && !$("#fld-sub").value) $("#fld-sub").placeholder = g.subcategory;
+      if (data.needs_description) $("#fld-desc").focus();
+
+      if (nearMatches.length) {
+        $("#near-box").hidden = false;
+        $("#near-list").innerHTML = nearMatches.map(n => `
+          <div class="near-item">
+            <div><span class="cat">${esc(n.category)}</span>
+              <code>${esc((n.body||"").slice(0,60))}</code>
+              ${n.trigger ? `<span class="trig">${esc(n.trigger)}</span>` : ""}
+            </div>
+            <div>
+              <button class="mini" data-near="update" data-id="${n.id}">Update</button>
+              <button class="mini" data-near="fork" data-id="${n.id}">Fork</button>
+            </div>
+          </div>`).join("");
+      } else {
+        $("#near-box").hidden = true;
+      }
+    } catch (e) {
+      $("#guess-box").textContent = "Preview failed: " + e.message;
+    }
+  }
+
+  $("#capture-text").addEventListener("input", () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(runPreview, 220);
+  });
+
+  $("#near-list")?.addEventListener?.("click", () => {});
+  document.getElementById("near-list").addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-near]");
+    if (!btn) return;
+    const near_action = btn.dataset.near;
+    const near_id = Number(btn.dataset.id);
+    await doCapture({ near_action, near_id });
+  });
+
+  $("#btn-read-clip").addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      $("#capture-text").value = text;
+      await api("/api/clipboard/preview", { method: "POST", body: JSON.stringify({ text }) });
+      runPreview();
+      toast("Clipboard stuck to the paper");
+    } catch {
+      toast("Clipboard permission needed — paste instead");
+      $("#capture-text").focus();
+    }
+  });
+
+  async function doCapture(extra = {}) {
+    const text = $("#capture-text").value;
+    if (!text.trim() && extra.action !== "dismiss") {
+      toast("Nothing to file");
+      return;
+    }
+    const payload = {
+      text,
+      category: $("#fld-category").value || undefined,
+      subcategory: $("#fld-sub").value || undefined,
+      trigger: $("#fld-trigger").value || undefined,
+      description: $("#fld-desc").value || undefined,
+      ...extra,
+    };
+    try {
+      const res = await api("/api/capture", { method: "POST", body: JSON.stringify(payload) });
+      if (res.action === "dismiss") {
+        toast("Dismissed — nothing stuck");
+        $("#capture-text").value = "";
+        runPreview();
+        return;
+      }
+      flyLand();
+      toast(res.action === "updated" ? "Updated — now current" : "Filed · stuck to FlyPaper");
+      $("#capture-text").value = "";
+      $("#fld-category").value = "";
+      $("#fld-sub").value = "";
+      $("#fld-trigger").value = "";
+      $("#fld-desc").value = "";
+      runPreview();
+      refreshHealth();
+      refreshBots();
+      refreshSubs();
+    } catch (e) {
+      toast("Capture failed: " + e.message);
+    }
+  }
+
+  $$("#panel-capture [data-action]").forEach(btn => {
+    btn.addEventListener("click", () => handleCaptureAction(btn.dataset.action));
+  });
+
+  function handleCaptureAction(action) {
+    if (action === "1") {
+      doCapture({ action: "file" });
+    } else if (action === "2") {
+      $("#fld-category").focus();
+      $("#fld-category").select();
+    } else if (action === "3") {
+      $("#fld-sub").focus();
+    } else if (action === "4") {
+      $("#fld-trigger").focus();
+      if (!$("#fld-trigger").value) $("#fld-trigger").value = ";";
+    } else if (action === "5") {
+      doCapture({ action: "file", as_secret: true });
+    } else if (action === "esc") {
+      doCapture({ action: "dismiss" });
+    }
+  }
+
+  function typingInField() {
+    const a = document.activeElement;
+    return a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT");
+  }
+
+  document.addEventListener("keydown", (ev) => {
+    const captureActive = $("#panel-capture").classList.contains("active");
+    const retrieveActive = $("#panel-retrieve").classList.contains("active");
+
+    if (ev.key === "/" && !typingInField()) {
+      ev.preventDefault();
+      $("#tab-retrieve").click();
+      $("#retrieve-q").focus();
+      return;
+    }
+
+    if (captureActive && !typingInField()) {
+      if (ev.key === "1") { ev.preventDefault(); handleCaptureAction("1"); }
+      if (ev.key === "2") { ev.preventDefault(); handleCaptureAction("2"); }
+      if (ev.key === "3") { ev.preventDefault(); handleCaptureAction("3"); }
+      if (ev.key === "4") { ev.preventDefault(); handleCaptureAction("4"); }
+      if (ev.key === "5") { ev.preventDefault(); handleCaptureAction("5"); }
+    }
+    if (ev.key === "Escape" && captureActive) {
+      ev.preventDefault();
+      handleCaptureAction("esc");
+    }
+
+    if (retrieveActive) {
+      if (ev.key === "ArrowDown") {
+        ev.preventDefault();
+        selectedIdx = Math.min(selectedIdx + 1, retrieveItems.length - 1);
+        paintRetrieve();
+      } else if (ev.key === "ArrowUp") {
+        ev.preventDefault();
+        selectedIdx = Math.max(selectedIdx - 1, 0);
+        paintRetrieve();
+      } else if (ev.key === "Enter" && !ev.isComposing) {
+        if (document.activeElement === $("#retrieve-q") || !typingInField() || document.activeElement === $("#retrieve-q")) {
+          ev.preventDefault();
+          copySelected();
+        }
+      }
+    }
+  });
+
+  // Enter in category/sub/trigger files as guessed
+  ["fld-category","fld-sub","fld-trigger","fld-desc"].forEach(id => {
+    $(`#${id}`).addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        doCapture({ action: "file" });
+      }
+    });
+  });
+
+  let retrieveTimer = null;
+  $("#retrieve-q").addEventListener("input", () => {
+    clearTimeout(retrieveTimer);
+    retrieveTimer = setTimeout(refreshRetrieve, 120);
+  });
+  $("#retrieve-q").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      copySelected();
+    }
+  });
+
+  async function refreshRetrieve() {
+    const q = $("#retrieve-q").value;
+    try {
+      const data = await api("/api/retrieve?q=" + encodeURIComponent(q));
+      retrieveItems = data.items || [];
+      selectedIdx = 0;
+      paintRetrieve();
+    } catch (e) {
+      $("#retrieve-list").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+    }
+  }
+
+  function paintRetrieve() {
+    const box = $("#retrieve-list");
+    if (!retrieveItems.length) {
+      box.innerHTML = `<div class="empty">No sticky notes yet — Capture something, or demo seed will fill the jar.</div>`;
+      return;
+    }
+    box.innerHTML = retrieveItems.map((it, i) => {
+      const heat = Math.max(0.2, it.heat || 0);
+      const body = it.category === "Secret"
+        ? `••••${it.last4 || ""} · ${it.secret_status || "active"}`
+        : (it.description || it.body || it.path || "");
+      return `<div class="item ${i===selectedIdx?"selected":""}" data-idx="${i}">
+        <div class="heat" style="opacity:${0.25 + heat*0.75};height:${24 + heat*28}px"></div>
+        <div class="item-body">
+          <div class="item-top">
+            <span class="cat">${esc(it.category)}${it.subcategory ? " / " + esc(it.subcategory) : ""}</span>
+            ${it.trigger ? `<span class="trig">${esc(it.trigger)}</span>` : ""}
+            ${it.pin ? `<span class="chip">📌</span>` : ""}
+            <span class="chip muted">×${it.freq||0}</span>
+          </div>
+          <div class="snippet">${esc(String(body).replace(/\s+/g," ").slice(0,120))}</div>
+        </div>
+        <div class="item-actions">
+          <button class="icon-btn" data-act="pin" data-id="${it.id}" title="Pin">📌</button>
+          <button class="icon-btn" data-act="del" data-id="${it.id}" title="Delete">✕</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  $("#retrieve-list").addEventListener("click", async (ev) => {
+    const act = ev.target.closest("[data-act]");
+    if (act) {
+      ev.stopPropagation();
+      const id = act.dataset.id;
+      if (act.dataset.act === "pin") {
+        await api(`/api/items/${id}/pin`, { method: "POST", body: JSON.stringify({ pin: true }) });
+        toast("Pinned");
+        refreshRetrieve();
+      } else if (act.dataset.act === "del") {
+        await api(`/api/items/${id}`, { method: "DELETE" });
+        toast("Peeled off");
+        refreshHealth();
+        refreshRetrieve();
+      }
+      return;
+    }
+    const row = ev.target.closest(".item");
+    if (!row) return;
+    selectedIdx = Number(row.dataset.idx);
+    paintRetrieve();
+    copySelected();
+  });
+
+  async function copySelected() {
+    const it = retrieveItems[selectedIdx];
+    if (!it) return;
+    try {
+      const data = await api("/api/retrieve/copy?id=" + it.id);
+      const text = data.text || "";
+      await navigator.clipboard.writeText(text);
+      toast("Copied to clipboard");
+      flyLand($("#panel-retrieve .card"));
+      refreshRetrieve();
+    } catch (e) {
+      // fallback: copy body from list
+      try {
+        await navigator.clipboard.writeText(it.body || it.path || "");
+        toast("Copied (local)");
+      } catch {
+        toast("Copy failed: " + e.message);
+      }
+    }
+  }
+
+  // boot
+  (async () => {
+    await refreshHealth();
+    await refreshBots();
+    await refreshSubs();
+    // ensure demo if empty
+    try {
+      const h = await api("/api/health");
+      if (h.items === 0) {
+        await api("/api/demo/seed", { method: "POST", body: "{}" });
+        await refreshHealth();
+        await refreshBots();
+      }
+    } catch { /* ignore */ }
+  })();
+})();
+</script>
+</body>
+</html>

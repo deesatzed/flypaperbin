@@ -9,3 +9,11 @@ build/
 node_modules/
 .venv/
 *.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.eggs/
+.coverage
+htmlcov/
+.flypaper/
