@@ -59,7 +59,7 @@ Data lives in `~/.flypaper/flypaper.db` (override with `FLYPAPER_DB`).
 
 ## Name note
 
-**FlyPaper** stays the product name (sticky memory). **FileFly** is the mascot — the clerk fly who stamps DECISION then files. Repo/app id remains `flypaperbin` / `flypaper` unless we deliberately rename later.
+**FlyPaper** stays the product name (sticky memory). Meme format matches the X fly-brain demos (split UI + connectome raster): *the fly brain can file my clipboard after it decides*. Repo/app id remains `flypaperbin` / `flypaper` unless we deliberately rename later.
 
 ## Why “FlyPaper”
 
